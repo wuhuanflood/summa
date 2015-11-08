@@ -19,7 +19,9 @@
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 module read_attrb_module
+USE netcdf
 USE nrtype
+USE netcdf_util_module, only: check
 implicit none
 private
 public::read_attrb
@@ -28,56 +30,63 @@ contains
  ! ************************************************************************************************
  ! public subroutine read_attrb: read information on local attributes
  ! ************************************************************************************************
- subroutine read_attrb(nHRU,err,message)
+ subroutine read_attrb(err,message)
  ! provide access to subroutines
- USE ascii_util_module,only:file_open              ! open ascii file
- USE ascii_util_module,only:split_line             ! extract the list of variable names from the character string
- USE ascii_util_module,only:get_vlines             ! read a vector of non-comment lines from an ASCII file
+ USE netcdf_util_module,only:file_open             ! open netCDF file
  USE allocspace_module,only:alloc_attr             ! module to allocate space for local attributes
  USE allocspace_module,only:alloc_type             ! module to allocate space for categorical data
  ! provide access to data
  USE summaFileManager,only:SETNGS_PATH             ! path for metadata files
  USE summaFileManager,only:LOCAL_ATTRIBUTES        ! file containing information on local attributes
+ USE data_struc,only: gru_struc, nGRU, nHRU        ! gru-hru structures
+ USE data_struc,only:index_map                     ! index mapping 
  USE data_struc,only:attr_meta,type_meta           ! metadata structures
- USE data_struc,only:attr_hru,type_hru             ! data structures
+ USE data_struc,only:attr_gru,type_gru             ! data structures
  USE var_lookup,only:iLookATTR,iLookTYPE           ! named variables for elements of the data structures
  USE get_ixname_module,only:get_ixAttr,get_ixType  ! access function to find index of elements in structure
+ 
  implicit none
  ! define output
- integer(i4b),intent(out)             :: nHRU        ! number of hydrologic response units
- integer(i4b),intent(out)             :: err         ! error code
- character(*),intent(out)             :: message     ! error message
+ integer(i4b),intent(out)             :: err       ! error code
+ character(*),intent(out)             :: message   ! error message
  ! define general variables
  real(dp),parameter                   :: missingDouble=-9999._dp  ! missing data
- integer(i4b),parameter               :: missingInteger=-9999     ! missing data
- character(len=256)                   :: cmessage        ! error message for downwind routine
- character(LEN=256)                   :: infile          ! input filename
- integer(i4b),parameter               :: unt=99          ! DK: need to either define units globally, or use getSpareUnit
- integer(i4b)                         :: iline           ! loop through lines in the file
- integer(i4b),parameter               :: maxLines=1000   ! maximum lines in the file
- character(LEN=256)                   :: temp            ! single lime of information
+ character(len=256)                   :: cmessage                 ! error message for downwind routine
+ character(LEN=256)                   :: infile                   ! input filename
+ 
+ ! define variables for NetCDF file operation
+ integer(i4b)                         :: mode               ! netCDF file open mode
+ integer(i4b)                         :: ncid, grp_ncid     ! integer variables for NetCDF IDs
+ integer(i4b), allocatable            :: varids(:)          ! integer variables for NetCDF IDs
+ integer(i4b)                         :: hruDimID, varid    ! integer variables for NetCDF IDs
+ integer(i4b), allocatable            :: start(:), count(:) ! specification for data reading          
  ! define local variables
- integer(i4b)                         :: iend            ! check for the end of the file
- character(LEN=512)                   :: nameString      ! string containing the list of attribute names
- character(LEN=256),allocatable       :: attNames(:)     ! vector of attribute names
- character(LEN=256),allocatable       :: attData(:)      ! vector of attribute data for a given HRU
- character(LEN=256),allocatable       :: dataLines(:)    ! vector of character strings from non-comment lines
- integer(i4b),parameter               :: categorical=101 ! named variable to denote categorical data
- integer(i4b),parameter               :: numerical=102   ! named variable to denote numerical data
- integer(i4b),allocatable             :: varType(:)      ! type of variable (categorical or numerical)
- integer(i4b),allocatable             :: varIndx(:)      ! index of variable within its data structure
- integer(i4b)                         :: iAtt            ! index of an attribute name
- integer(i4b)                         :: iHRU            ! index of an HRU
- integer(i4b)                         :: nAtt            ! number of model attributes
- integer(i4b)                         :: nVar_attr       ! number of variables in the model attribute structure
- integer(i4b)                         :: nVar_type       ! number of variables in the model category structure
- logical(lgt),allocatable             :: checkType(:)    ! vector to check if we have all desired categorical values
- logical(lgt),allocatable             :: checkAttr(:)    ! vector to check if we have all desired local attributes
+ integer(i4b)                         :: varIndx            ! index of variable within its data structure
+ integer(i4b)                         :: iAtt               ! index of an attribute name
+ integer(i4b)                         :: iHRU,iGRU          ! index of HRU and GRU
+ integer(i4b)                         :: iVar               ! index of an HRU
+ integer(i4b)                         :: nvar_f             ! number of variables readed from netcdf input file
+ integer(i4b)                         :: nVar_attr          ! number of variables in the model attribute structure
+ integer(i4b)                         :: nVar_type          ! number of variables in the model category structure
+ integer(i4b),allocatable             :: buf_int_1d(:)      ! temporal buffer for reading data
+ real(dp),allocatable                 :: buf_flt_1d(:)      ! temporal buffer for reading data
+ integer(i4b)                         :: jVar, jStruct      ! index for variables and structures
+ integer(i4b)                         :: hruCount           ! number of hrus in a gru
+ integer(i4b)                         :: hru_ix             ! hru index; it is sequential over entire domain,but not necessary within a gru
+
+
+ ! define indicators for different data structures
+ integer(i4b),parameter               :: ixType=1           ! indicator for type_gru structure
+ integer(i4b),parameter               :: ixAttr=2           ! indicator for attr_gru structure 
+ integer(i4b)                         :: hit                ! number of variables with same name across all data structures 
+ character(len=64)                    :: varname=''         ! variable name
+ integer(i4b), parameter              :: imiss = -999       ! missing value for variable id
+ 
  ! Start procedure here
  err=0; message="read_attrb/"
 
  ! **********************************************************************************************
- ! (0) get number of variables in each data structure
+ !8 (0) get number of variables in each data structure in model
  ! **********************************************************************************************
  ! check that metadata structures are initialized
  if(.not.associated(attr_meta) .or. .not.associated(type_meta))then
@@ -85,143 +94,118 @@ contains
  endif
  nVar_attr = size(attr_meta)
  nVar_type = size(type_meta)
- ! allocate space for the check vectors
- allocate(checkType(nVar_type),checkAttr(nVar_attr),stat=err)
- if(err/=0)then; err=20; message=trim(message)//'problem allocating space for variable check vectors'; return; endif
- checkType(:) = .false.
- checkAttr(:) = .false.
-
 
  ! **********************************************************************************************
- ! (1) open files, etc.
+ ! (1) open hru_attributes file and allocate memory for data structure according to data file
  ! **********************************************************************************************
  ! build filename
  infile = trim(SETNGS_PATH)//trim(LOCAL_ATTRIBUTES)
  ! open file
- call file_open(trim(infile),unt,err,cmessage)
+ mode=nf90_NoWrite
+ call file_open(trim(infile), mode, ncid, err, cmessage)
  if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
 
-
- ! **********************************************************************************************
- ! (2) read local attributes
- ! **********************************************************************************************
- ! ---------------------------------------------------------------------------------------------
- ! read attribute names
- ! ---------------------------------------------------------------------------------------------
- do iline=1,maxLines
-  ! (read through comment lines)
-  read(unt,'(a)',iostat=iend) temp  ! read a line of data
-  if(iend/=0)then; err=20; message=trim(message)//'got to end of file before found the format code'; return; endif
-  if (temp(1:1)=='!')cycle
-  ! (read in format string -- assume that the first non-comment line is the list of attribute names)
-  read(temp,'(a)')nameString  ! read in list of attribute names
-  exit
-  if(iLine==maxLines)then; err=20; message=trim(message)//'problem finding list of attribute names'; return; endif
- end do ! looping through lines
- ! ---------------------------------------------------------------------------------------------
- ! identify the type of each attribute
- ! ---------------------------------------------------------------------------------------------
- ! split the line into an array of words
- call split_line(nameString,attNames,err,cmessage)
- if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
- ! identify the number of attributes
- nAtt = size(attNames)
- ! allocate space for the variable type and index
- allocate(varType(nAtt),varIndx(nAtt), stat=err)
- if(err/=0)then; err=20; message=trim(message)//'unable to allocate space for the variable type and index'; return; endif
- ! initialize variables as missing
- varType(:) = missingInteger
- varIndx(:) = missingInteger
- ! loop through the attribute names
- do iAtt=1,nAtt
-  ! find attribute name
-  select case(trim(attNames(iAtt)))
-   ! categorical data
-   case('hruIndex','vegTypeIndex','soilTypeIndex','slopeTypeIndex','downHRUindex')
-    varType(iAtt) = categorical
-    varIndx(iAtt) = get_ixType(attNames(iAtt))
-    checkType(varIndx(iAtt)) = .true.
-   ! numerical data
-   case('latitude','longitude','elevation','tan_slope','contourLength','HRUarea','mHeight')
-    varType(iAtt) = numerical
-    varIndx(iAtt) = get_ixAttr(attNames(iAtt))
-    checkAttr(varIndx(iAtt)) = .true.
-   ! check that variables are what we expect
-   case default
-    message=trim(message)//'unknown variable ['//trim(attNames(iAtt))//'] in local attributes file'
-    err=20; return
-  end select
-  ! check that the variable could be identified in the data structure
-  if(varIndx(iAtt) < 1)then; err=20; message=trim(message)//'unable to find variable ['//trim(attNames(iAtt))//'] in data structure'; return; endif
-  ! print progress
-  !print*, (varType(iAtt)==categorical), varIndx(iAtt), trim(attNames(iAtt))
- end do  ! (looping through attribute names)
- ! check that we have all desired categorical variables
- if(any(.not.checkType))then
-  do iAtt=1,nVar_type
-   if(.not.checkType(iAtt))then; err=20; message=trim(message)//'missing variable ['//trim(type_meta(iAtt)%varname)//'] in local attributes file'; return; endif
-  end do
- endif
- ! check that we have all desired local attributes
- if(any(.not.checkAttr))then
-  do iAtt=1,nVar_attr
-   if(.not.checkAttr(iAtt))then; err=20; message=trim(message)//'missing variable ['//trim(attr_meta(iAtt)%varname)//'] in local attributes file'; return; endif
-  end do
- endif
-
-
- ! **********************************************************************************************
- ! (3) read attributes for each HRU, and allocate space
- ! **********************************************************************************************
- ! get a list of character strings from non-comment lines
- call get_vlines(unt,dataLines,err,cmessage)
- if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
- ! get the number of HRUs
- nHRU = size(dataLines)
  ! allocate space
- call alloc_attr(nHRU,err,cmessage); if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
- call alloc_type(nHRU,err,cmessage); if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
+ call alloc_type(err,cmessage); if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
+ call alloc_attr(err,cmessage); if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
+ 
+ allocate(varids(nVar_attr+nVar_type), stat=err)
+ if(err/=0)then; err=20; message=trim(message)//"problem allocating space for varids"; return; endif
 
+ allocate(buf_int_1d(nHRU), buf_flt_1d(nHRU), stat=err)
+ if(err/=0)then; err=20; message=trim(message)//'problem allocating space for buffer reading'; return; endif
+
+ allocate ( start(1), count(1), stat=err )
+ if(err/=0)then; err=20; message=trim(message)//'problem allocating space for netcdf reading specification'; return; endif
+ ! **********************************************************************************************
+ ! (3) read local attributes and types  from netCDF file group "hru_attributes"
+ ! (ie., 'hruIndex','vegTypeIndex','soilTypeIndex','slopeTypeIndex','downHRUindex',
+ ! 'latitude','longitude','elevation','tan_slope','contourLength','HRUarea','mHeight')
+ ! **********************************************************************************************
+ varIndx= imiss
+ 
+ ! get group id
+ call check(nf90_inq_ncid(ncid, 'hru_attributes', grp_ncid), message) 
+
+ ! get variable ids in the group
+ call check(nf90_inq_varids(grp_ncid, nvar_f, varids), message)
+ if((nVar_type + nVar_attr)/=nvar_f) then; err=20; message=trim(message)//"the number of variable &
+    in input file is not correct"; return; endif
+
+ jVar    = imiss
+ jStruct =imiss
+ start = (/ 1 /)
+ count = (/ nHRU /)
+
+ !***** Read all the variables in the group of input files, and then populate them to their corresponding
+ ! hierachical data strucutres, according to their variable names. *************************************!  
+ do iVar=1, nvar_f ! iVar loop
+  call check(nf90_inquire_variable(grp_ncid, varids(iVar), varname), message)
+ 
+  ! "hit" is used to indicate the times of a variable name that can be found from summa data structures.
+  ! Only once of hit (i.e., hit=1) is expected to be correct. If hit>1, it means there are same variable names
+  ! showed up in different data structures. SUMMA only allows unique variable names accross all 
+  ! internal data structures.
+  hit=0 
+  varIndx= get_ixType(varname)
+  if(varIndx/=imiss)then; hit=hit+1; jVar = varIndx; jStruct=ixType; endif
+  varIndx = get_ixAttr(varname)
+  if(varIndx /= imiss)then; hit=hit+1; jVar= varIndx; jStruct=ixAttr; endif
+  
+  if(hit==0) then; err=20; message=trim(message)//'unable to find data structure &
+    for ['//trim(varname)//']'; return; endif
+  if(hit>1)then; err=20; message=trim(message)//'the variable name ['//trim(varname)//'] is found &
+    in multiple data structures'; return; endif
+ 
+  ! Read data according to the data type associated to data structures
+  select case(jStruct)
+    case(ixType);  
+     call check(nf90_get_var(grp_ncid, varids(iVar), buf_int_1d, start = start, count = count),message)
+    case(ixAttr)
+     call check(nf90_get_var(grp_ncid, varids(iVar), buf_flt_1d, start = start, count = count),message)
+  end select
+
+  ! populate the data structure. Note:
+  ! (1) The data for each variable stored in netcdf file have to be in the same order as the hru_ix and hru_id.
+  ! (2) The index "hru_ix" is sequential over the entire model spatial domain, but not necessary sequential within a gru.
+  do iGRU=1, nGRU
+   hruCount=gru_struc(iGRU)%hruCount
+   do iHRU=1, hruCount ! iHRU loop
+    hru_ix=gru_struc(iGRU)%hru(iHRU)%hru_ix
+   
+    select case(jStruct)
+     case(ixType);
+      type_gru(iGRU)%hru(iHRU)%var(jVar)=buf_int_1d(hru_ix)
+     case(ixAttr)
+      attr_gru(iGRU)%hru(iHRU)%var(jVar)=buf_flt_1d(hru_ix)
+    endselect
+   enddo  ! end of iHRU loop
+  enddo ! end of iGRU loop
+    
+ enddo ! end of iVar loop
+
+ ! close the HRU_ATTRIBUTES netCDF file
+ call check(nf90_close(ncid), message)
 
  ! **********************************************************************************************
- ! (4) put data in the structures
+ ! (4) deallocate space
  ! **********************************************************************************************
- ! loop through HRUs
- do iHRU=1,nHRU
-  ! split the line into an array of words
-  call split_line(dataLines(iHRU),attData,err,cmessage)
-  if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
-  if(size(attData) /= nAtt)then; err=20; message=trim(message)//'number of attributes does not match expected number of attributes'; return; endif
-  ! put attributes in the appropriate structures
-  do iAtt=1,nAtt
-   select case(varType(iAtt))
-    case(numerical);   read(attData(iAtt),*,iostat=err) attr_hru(iHRU)%var(varIndx(iAtt))
-    case(categorical); read(attData(iAtt),*,iostat=err) type_hru(iHRU)%var(varIndx(iAtt))
-    case default; err=20; message=trim(message)//'unable to find type of attribute (categorical or numerical)'; return
-   end select
-   if(err/=0)then; err=20; message=trim(message)//'problem with internal read of attribute data'; return; endif
-  end do  ! (looping through model attributes)
- end do  ! (looping through HRUs)
-
- ! **********************************************************************************************
- ! (5) deallocate space
- ! **********************************************************************************************
- deallocate(attNames,attData,dataLines,varType,varIndx,checkType,checkAttr, stat=err)
+ deallocate(buf_int_1d, buf_flt_1d, stat=err)
  if(err/=0)then; err=20; message=trim(message)//'problem deallocating space'; return; endif
 
  ! test
- !do iHRU=1,nHRU
- ! print*, '*****'
- ! print*, 'hruIndex       = ', type_hru(iHRU)%var(iLookTYPE%hruIndex)
- ! print*, 'latitude       = ', attr_hru(iHRU)%var(iLookATTR%latitude)
- ! print*, 'longitude      = ', attr_hru(iHRU)%var(iLookATTR%longitude)
- ! print*, 'elevation      = ', attr_hru(iHRU)%var(iLookATTR%elevation)
- ! print*, 'mHeight        = ', attr_hru(iHRU)%var(iLookATTR%mHeight)
- ! print*, 'vegTypeIndex   = ', type_hru(iHRU)%var(iLookTYPE%vegTypeIndex)
- ! print*, 'soilTypeIndex  = ', type_hru(iHRU)%var(iLookTYPE%soilTypeIndex)
- ! print*, 'slopeTypeIndex = ', type_hru(iHRU)%var(iLookTYPE%slopeTypeIndex)
- !end do ! (looping through HRUs)
- !pause
+ !  do iHRU=1,nHRU
+ !   print*, '*****'
+ !   print*, 'hruIndex       = ', type_hru(iHRU)%var(iLookTYPE%hruIndex)
+ !   print*, 'latitude       = ', attr_hru(iHRU)%var(iLookATTR%latitude)
+ !   print*, 'longitude      = ', attr_hru(iHRU)%var(iLookATTR%longitude)
+ !   print*, 'elevation      = ', attr_hru(iHRU)%var(iLookATTR%elevation)
+ !   print*, 'mHeight        = ', attr_hru(iHRU)%var(iLookATTR%mHeight)
+ !   print*, 'vegTypeIndex   = ', type_hru(iHRU)%var(iLookTYPE%vegTypeIndex)
+ !   print*, 'soilTypeIndex  = ', type_hru(iHRU)%var(iLookTYPE%soilTypeIndex)
+ !   print*, 'slopeTypeIndex = ', type_hru(iHRU)%var(iLookTYPE%slopeTypeIndex)
+ !  end do 
+ !  pause
 
 
  end subroutine read_attrb

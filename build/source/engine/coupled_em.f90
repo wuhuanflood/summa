@@ -208,7 +208,8 @@ contains
  ! ----------------------------------------------------------------------------------------------------------------------------------------------
  ! initialize error control
  err=0; message="coupled_em/"
-
+ !print*,  'mpar_data%summerLAI=', mpar_data%var(48)
+ 
  ! This is the start of a data step for a local HRU
 
  ! count the number of snow and soil layers
@@ -377,6 +378,7 @@ contains
   if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
 
 
+ print*,  'mpar_data%summerLAI=', mpar_data%var(48)
   ! (4) compute canopy sw radiation fluxes...
   ! -----------------------------------------
   call vegSWavRad(&
@@ -384,7 +386,6 @@ contains
                   computeVegFlux,               & ! intent(in): logical flag to compute vegetation fluxes (.false. if veg buried by snow)
                   err,cmessage)                   ! intent(out): error control
   if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
-
 
 
   ! (5) compute canopy throughfall and unloading...

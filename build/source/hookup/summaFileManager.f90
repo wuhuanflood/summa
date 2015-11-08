@@ -33,15 +33,7 @@ CHARACTER(LEN=summaPathLen)  :: INPUT_PATH ='input/default/'    ! INPUT_PATH
 CHARACTER(LEN=summaPathLen)  :: OUTPUT_PATH='output/default/'   ! OUTPUT_PATH
 ! define name of control files    (and default values)
 CHARACTER(LEN=summaPathLen)  :: M_DECISIONS      ='summa_zDecisions.txt'           ! definition of model decisions
-CHARACTER(LEN=summaPathLen)  :: META_TIME        ='summa_zTimeMeta.txt'            ! metadata for time
-CHARACTER(LEN=summaPathLen)  :: META_ATTR        ='summa_zLocalAttributeMeta.txt'  ! metadata for local attributes
-CHARACTER(LEN=summaPathLen)  :: META_TYPE        ='summa_zCatergoryMeta.txt'       ! metadata for local classification of veg, soil, etc.
-CHARACTER(LEN=summaPathLen)  :: META_FORCE       ='summa_zForceMeta.txt'           ! metadata for model forcing variables
-CHARACTER(LEN=summaPathLen)  :: META_LOCALPARAM  ='summa_zLocalParamMeta.txt'      ! metadata for model parameters
-CHARACTER(LEN=summaPathLen)  :: META_LOCALMVAR   ='summa_zLocalModelVarMeta.txt'   ! metadata for model variables
-CHARACTER(LEN=summaPathLen)  :: META_LOCALINDEX  ='summa_zLocalModelIndexMeta.txt' ! metadata for model indices
-CHARACTER(LEN=summaPathLen)  :: META_BASINPARAM  ='summa_zBasinParamMeta.txt'      ! metadata for model parameters
-CHARACTER(LEN=summaPathLen)  :: META_BASINMVAR   ='summa_zBasinModelVarMeta.txt'   ! metadata for model variables
+CHARACTER(LEN=summaPathLen)  :: META_VAR         ='summa_zVarMeta.nc'              ! metadata for time
 CHARACTER(LEN=summaPathLen)  :: LOCAL_ATTRIBUTES ='summa_zLocalAttributes.txt'     ! local attributes
 CHARACTER(LEN=summaPathLen)  :: LOCALPARAM_INFO  ='summa_zLocalParamInfo.txt'      ! default values and constraints for local model parameters
 CHARACTER(LEN=summaPathLen)  :: BASINPARAM_INFO  ='summa_zBasinParamInfo.txt'      ! default values and constraints for basin model parameters
@@ -109,15 +101,7 @@ read(unt,*)INPUT_PATH      ; call checkLineRead(INPUT_PATH,       err,message); 
 read(unt,*)OUTPUT_PATH     ; call checkLineRead(OUTPUT_PATH,      err,message); if(err/=0)return
 read(unt,'(a)')temp
 read(unt,*)M_DECISIONS     ; call checkLineRead(M_DECISIONS,      err,message); if(err/=0)return
-read(unt,*)META_TIME       ; call checkLineRead(META_TIME,        err,message); if(err/=0)return
-read(unt,*)META_ATTR       ; call checkLineRead(META_ATTR,        err,message); if(err/=0)return
-read(unt,*)META_TYPE       ; call checkLineRead(META_TYPE,        err,message); if(err/=0)return
-read(unt,*)META_FORCE      ; call checkLineRead(META_FORCE,       err,message); if(err/=0)return
-read(unt,*)META_LOCALPARAM ; call checkLineRead(META_LOCALPARAM,  err,message); if(err/=0)return
-read(unt,*)META_LOCALMVAR  ; call checkLineRead(META_LOCALMVAR,   err,message); if(err/=0)return
-read(unt,*)META_LOCALINDEX ; call checkLineRead(META_LOCALINDEX,  err,message); if(err/=0)return
-read(unt,*)META_BASINPARAM ; call checkLineRead(META_BASINPARAM,  err,message); if(err/=0)return
-read(unt,*)META_BASINMVAR  ; call checkLineRead(META_BASINMVAR,   err,message); if(err/=0)return
+read(unt,*)META_VAR        ; call checkLineRead(META_VAR,        err,message); if(err/=0)return
 read(unt,*)LOCAL_ATTRIBUTES; call checkLineRead(LOCAL_ATTRIBUTES, err,message); if(err/=0)return
 read(unt,*)LOCALPARAM_INFO ; call checkLineRead(LOCALPARAM_INFO,  err,message); if(err/=0)return
 read(unt,*)BASINPARAM_INFO ; call checkLineRead(BASINPARAM_INFO,  err,message); if(err/=0)return

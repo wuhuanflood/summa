@@ -35,7 +35,8 @@ contains
  ! dummy variables
  character(*),intent(in)    :: refdate             ! units string (time since...)
  integer(i4b),intent(out)   :: iyyy,im,id,ih,imin  ! time (year/month/day/hour/minute)
- real(dp),intent(out)       :: dsec                ! seconds
+ !real(dp),intent(out)      :: dsec                ! seconds
+ integer(i4b),intent(out)   :: dsec                ! seconds
  integer(i4b),intent(out)   :: err                 ! error code
  character(*),intent(out)   :: message             ! error message
  ! local variables
@@ -44,6 +45,7 @@ contains
  ! iniitalize error control
  err=0; message="extractTime/"
 
+ dsec=0
  ! get the length of the string
  n      = len_trim(refdate)
  ! move to a position in string past the time units (seconds since , days since , hours since )
@@ -71,7 +73,7 @@ contains
  if(id > 31)then; err=20; message=trim(message)//'day > 31'; return; endif
  ! check if we are at the end of the string
  if (istart+(iend-2)==n) then
-  ih=0; imin=0; dsec=0._dp; return
+  ih=0; imin=0; dsec=0; return
  endif
  print*, 'iyyy, im, id = ', iyyy, im, id
 
@@ -136,7 +138,8 @@ contains
  ! input variables
  integer(i4b),intent(in)   :: iyyy,mm,id   ! year, month, day
  integer(i4b),intent(in)   :: ih,imin      ! hour, minute
- real(dp),intent(in)       :: dsec         ! seconds
+ !real(dp),intent(in)       :: dsec         ! seconds
+ integer(i4b),intent(in)   :: dsec                ! seconds
  ! output
  real(dp),intent(out)      :: juldayss
   integer(i4b),intent(out) :: err          ! error code

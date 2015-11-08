@@ -508,6 +508,7 @@ contains
  ! initialize error control
  err=0; message='canopy_SW/'
 
+
  ! compute the albedo of the ground surface
  call gndAlbedo(&
                 ! input

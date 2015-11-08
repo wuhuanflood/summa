@@ -121,14 +121,21 @@ contains
  ! public subroutine mDecisions: save model decisions as named integers
  ! ************************************************************************************************
  subroutine mDecisions(err,message)
+ USE netcdf
+ USE netcdf_util_module,only: &
+ file_open,    &                                            ! open netCDF file
+ check                                                      ! check the status of netCDF file operation 
  ! model time structures
  USE multiconst,only:secprday               ! number of seconds in a day
  USE data_struc,only:time_meta              ! time metadata
  USE var_lookup,only:iLookTIME              ! named variables that identify indices in the time structures
  USE data_struc,only:startTime,finshTime    ! start/end time of simulation
+ USE data_struc,only:refTime                ! reference time
  USE data_struc,only:dJulianStart           ! julian day of start time of simulation
  USE data_struc,only:dJulianFinsh           ! julian day of end time of simulation
+ USE summaFileManager,only:INPUT_PATH       ! path of the forcing data file 
  USE data_struc,only:data_step              ! length of data step (s)
+ USE data_struc,only:data_steps             ! total time steps in a forcing file
  USE data_struc,only:numtim                 ! number of time steps in the simulation
  ! model decision structures
  USE data_struc,only:model_decisions        ! model decision structure
@@ -147,7 +154,11 @@ contains
  ! define local variables
  character(len=256)                   :: cmessage       ! error message for downwind routine
  integer(i4b)                         :: nAtt           ! number of attributes in the time structures
- real(dp)                             :: dsec           ! second
+ character(LEN=256)                   :: infile         ! input filename
+ integer(i4b)                         :: ncid, grp_ncid ! netcdf ids
+ integer(i4b)                         :: hru_varid      ! netcdf ids
+ integer(i4b)                         :: mode           ! netcdf reading mode
+ character(len=256)                   :: refdate        ! units string (time since...)
  ! initialize error control
  err=0; message='mDecisions/'
 
@@ -174,7 +185,7 @@ contains
                   startTime%var(iLookTIME%id),                           & ! day
                   startTime%var(iLookTIME%ih),                           & ! hour
                   startTime%var(iLookTIME%imin),                         & ! minute
-                  dsec,                                                  & ! second
+                  startTime%var(iLookTIME%isec),                         & ! second
                   err,cmessage)                                            ! error control
  if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
 
@@ -185,7 +196,7 @@ contains
                   finshTime%var(iLookTIME%id),                           & ! day
                   finshTime%var(iLookTIME%ih),                           & ! hour
                   finshTime%var(iLookTIME%imin),                         & ! minute
-                  dsec,                                                  & ! second
+                  finshTime%var(iLookTIME%isec),                         & ! second
                   err,cmessage)
  if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
 
@@ -196,7 +207,7 @@ contains
                  startTime%var(iLookTIME%id),                           & ! day
                  startTime%var(iLookTIME%ih),                           & ! hour
                  startTime%var(iLookTIME%imin),                         & ! minute
-                 0._dp,                                                 & ! second
+                 startTime%var(iLookTIME%isec),                         & ! second
                  dJulianStart,                                          & ! julian date for the start of the simulation
                  err, cmessage)                                           ! error control
  if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
@@ -208,7 +219,7 @@ contains
                  finshTime%var(iLookTIME%id),                           & ! day
                  finshTime%var(iLookTIME%ih),                           & ! hour
                  finshTime%var(iLookTIME%imin),                         & ! minute
-                 0._dp,                                                 & ! second
+                 finshTime%var(iLookTIME%isec),                         & ! second
                  dJulianFinsh,                                          & ! julian date for the end of the simulation
                  err, cmessage)                                           ! error control
  if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
@@ -216,6 +227,35 @@ contains
  ! check that simulation end time is > start time
  if(dJulianFinsh < dJulianStart)then; err=20; message=trim(message)//'end time of simulation occurs before start time'; return; endif
 
+ !******** get forcing data_step from forcing input
+ ! build filename
+ write(infile,'(a,i4.4,i2.2,i2.2,i2.2,i2.2,a)') trim(INPUT_PATH)//'forcings_', &
+                                 startTime%var(iLookTIME%iyyy),startTime%var(iLookTIME%im),  &
+                                 startTime%var(iLookTIME%id),startTime%var(iLookTIME%ih), &
+                                 startTime%var(iLookTIME%imin),'.nc'
+ ! open file
+ mode=nf90_NoWrite
+ call file_open(infile, mode, ncid, err, cmessage)
+ call check( nf90_inq_varid(ncid, "time",hru_varid), message )
+ call check(nf90_get_att(ncid, hru_varid, "units", refdate), message)
+
+ call check(nf90_inq_grp_ncid(ncid, "forcings_input", grp_ncid), message)
+ call check(nf90_get_att(grp_ncid, NF90_GLOBAL, "data_step", data_step), message)
+ call check(nf90_get_att(grp_ncid, NF90_GLOBAL, "data_steps", data_steps), message)
+
+ call check(nf90_close(ncid), message)
+
+ ! put reference time information into the time structures
+ call extractTime(trim(refdate),                                       & ! date-time string
+                  refTime%var(iLookTIME%iyyy),                         & ! year
+                  refTime%var(iLookTIME%im),                           & ! month
+                  refTime%var(iLookTIME%id),                           & ! day
+                  refTime%var(iLookTIME%ih),                           & ! hour
+                  refTime%var(iLookTIME%imin),                         & ! minute
+                  refTime%var(iLookTIME%isec),                         & ! second
+                  err,cmessage)                                          ! error control
+ if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
+ 
  ! compute the number of time steps
  numtim = nint( (dJulianFinsh - dJulianStart)*secprday/data_step ) + 1
 

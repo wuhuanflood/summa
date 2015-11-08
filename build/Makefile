@@ -13,12 +13,12 @@
 
 # Define core directory below which everything resides. This is the
 # parent directory of the 'build' directory
-F_MASTER =
+F_MASTER =/home/huanwu/summa/fork/summa
 
 # Define the Fortran Compiler. If you are using gfortran, then this needs
 # to be version 4.8 or higher
 
-FC =
+FC =ifort
 
 # Define the NetCDF and LAPACK libraries and path to include files. Note
 # that the default paths defined are those that work for our compilers
@@ -52,7 +52,8 @@ endif
 
 # Intel fortran compiler
 ifeq "$(FC)" "ifort"
- NCDF_PATH = /opt/netcdf-4.3.0+ifort-12.1
+ NCDF_PATH =/usr/local/netcdf-4.3.0+ifort-12.1
+ #NCDF_PATH = /opt/netcdf-4.3.0+ifort-12.1
  LAPK_PATH = /usr
  # define the lapack libraries
  LIBLAPACK = -L$(LAPK_PATH)/lib -llapack
@@ -160,7 +161,8 @@ SOLVER = $(patsubst %, $(ENGINE_DIR)/%, $(SUMMA_SOLVER))
 SUMMA_PRELIM= \
 		conv_funcs.f90 \
 		ascii_util.f90 \
-		sunGeomtry.f90 \
+		netcdf_util.f90\
+        sunGeomtry.f90 \
 		get_ixname.f90 \
 		mDecisions.f90 \
 		snow_utils.f90 \
@@ -169,7 +171,6 @@ SUMMA_PRELIM= \
 		convE2Temp.f90 \
 		allocspace.f90 \
 		read_metad.f90 \
-		ffile_info.f90 \
 		read_attrb.f90 \
 		read_pinit.f90 \
 		pOverwrite.f90 \
@@ -207,7 +208,7 @@ SUMMA_MSOLVE = \
 
 # Define NetCDF routines
 SUMMA_NETCDF = \
-		def_output.f90 \
+        def_output.f90 \
 		modelwrite.f90
 NETCDF = $(patsubst %, $(NETCDF_DIR)/%, $(SUMMA_NETCDF))
 
@@ -292,6 +293,6 @@ clean:
 # Copy the executable to the bin directory
 install:
 	@mkdir -p $(EXE_PATH)
-	@mv $(DRIVER__EX) $(EXE_PATH)
+#	@mv $(DRIVER__EX) $(EXE_PATH)
 	$(info Add $(NCDF_PATH)/lib to your LD_LIBRARY_PATH)
 	$(info $(DRIVER__EX) successfully installed in $(EXE_PATH))
