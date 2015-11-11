@@ -378,7 +378,6 @@ contains
   if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
 
 
- print*,  'mpar_data%summerLAI=', mpar_data%var(48)
   ! (4) compute canopy sw radiation fluxes...
   ! -----------------------------------------
   call vegSWavRad(&
@@ -387,6 +386,7 @@ contains
                   err,cmessage)                   ! intent(out): error control
   if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
 
+  print*, 'dt_done=', dt_done, 'mpar_data%summerLAI=', mpar_data%var(48), ' mvar_data%scalarBelowCanopySolar=', mvar_data%var(64)
 
   ! (5) compute canopy throughfall and unloading...
   ! -----------------------------------------------

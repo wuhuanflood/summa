@@ -561,7 +561,6 @@ do iGRU=1, nGRU ! MAIN LOOP LEVEL 2 ON GRUS
   !print*, 'iHRU = ', iHRU
 
   time_gru(iGRU)%hru(iHRU)%var(:) = time_data%var(:)
-  print*, 'time_gru=', iGRU, iHRU, time_gru(iGRU)%hru(iHRU)
   ! assign pointers to HRUs
   time_data => time_gru(iGRU)%hru(iHRU)
   forc_data => forc_gru(iGRU)%hru(iHRU)
@@ -570,6 +569,7 @@ do iGRU=1, nGRU ! MAIN LOOP LEVEL 2 ON GRUS
   mpar_data => mpar_gru(iGRU)%hru(iHRU)
   mvar_data => mvar_gru(iGRU)%hru(iHRU)
   indx_data => indx_gru(iGRU)%hru(iHRU)
+
 
   !print*, 'iHRU=', iHRU, 'mpar_data%summerLAI=', mpar_data%var(48)
 
@@ -597,6 +597,7 @@ do iGRU=1, nGRU ! MAIN LOOP LEVEL 2 ON GRUS
   ifcSoilStartIndex => indx_data%var(iLookINDEX%ifcSoilStartIndex)%dat(1)
   ifcTotoStartIndex => indx_data%var(iLookINDEX%ifcTotoStartIndex)%dat(1)
 
+
   ! get NOAH-MP parameters
   call REDPRM(type_data%var(iLookTYPE%vegTypeIndex),                           & ! vegetation type index
               type_data%var(iLookTYPE%soilTypeIndex),                          & ! soil type
@@ -604,6 +605,7 @@ do iGRU=1, nGRU ! MAIN LOOP LEVEL 2 ON GRUS
               zSoilReverseSign,                                                & ! * not used: height at bottom of each layer [NOTE: negative] (m)
               nSoil,                                                           & ! number of soil layers
               urbanVegCategory)                                                  ! vegetation category for urban areas
+
 
   ! overwrite the vegetation height
   HVT(type_data%var(iLookTYPE%vegTypeIndex)) = mpar_data%var(iLookPARAM%heightCanopyTop)
@@ -613,6 +615,7 @@ do iGRU=1, nGRU ! MAIN LOOP LEVEL 2 ON GRUS
   if(model_decisions(iLookDECISIONS%LAI_method)%iDecision == specified)then
    SAIM(type_data%var(iLookTYPE%vegTypeIndex),:) = mpar_data%var(iLookPARAM%winterSAI)
    LAIM(type_data%var(iLookTYPE%vegTypeIndex),:) = mpar_data%var(iLookPARAM%summerLAI)*greenVegFrac_monthly
+   print*, 'summerLAI=', mpar_data%var(iLookPARAM%summerLAI)
   endif
 
   ! define the green vegetation fraction of the grid box (used to compute LAI)
@@ -640,6 +643,7 @@ do iGRU=1, nGRU ! MAIN LOOP LEVEL 2 ON GRUS
                   err,message)                       ! error control
   call handle_err(err,message)
 
+  !print*, 'iGRU=', iGRU, ' iHRU=', iHRU, 'mpar_data%summerLAI=', mpar_data%var(48), ' mvar_data%scalarBelowCanopySolar=', mvar_gru(iGRU)%hru(iHRU)%var(64)
   
   kHRU = 0
   ! identify the downslope HRU
@@ -685,7 +689,6 @@ do iGRU=1, nGRU ! MAIN LOOP LEVEL 2 ON GRUS
   
   ! write the forcing data to the model output file
   hru_ix= gru_struc(iGRU)%hru(iHRU)%hru_ix
-  print*, 'iHRU=', iHRU,'mvar_data%=scalarBelowCanopySolar=', mvar_gru(iGRU)%hru(iHRU)%var(64)
   call writeForce(fileout,hru_ix,jstep,err,message); call handle_err(err,message)
 
   ! write the model output to the NetCDF file
