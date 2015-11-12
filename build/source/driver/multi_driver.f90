@@ -643,7 +643,7 @@ do iGRU=1, nGRU ! MAIN LOOP LEVEL 2 ON GRUS
                   err,message)                       ! error control
   call handle_err(err,message)
 
-  !print*, 'iGRU=', iGRU, ' iHRU=', iHRU, 'mpar_data%summerLAI=', mpar_data%var(48), ' mvar_data%scalarBelowCanopySolar=', mvar_gru(iGRU)%hru(iHRU)%var(64)
+  print*, 'Tstep=',istep, 'iGRU=', iGRU, ' iHRU=', iHRU, 'summerLAI=', mpar_data%var(48), ' scalarBelowCanopySolar=', mvar_gru(iGRU)%hru(iHRU)%var(64)
   
   kHRU = 0
   ! identify the downslope HRU
