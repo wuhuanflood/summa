@@ -95,6 +95,7 @@ USE data_struc,only:bvar_data                               ! basin-average mode
 USE data_struc,only:model_decisions                         ! model decisions
 USE data_struc,only:urbanVegCategory                        ! vegetation category for urban areas
 USE data_struc,only:globalPrintFlag                         ! global print flag
+USE data_struc,only:fracJulDay                              ! fractional julian days since the start of year
 USE NOAHMP_VEG_PARAMETERS,only:SAIM,LAIM                    ! 2-d tables for stem area index and leaf area index (vegType,month)
 USE NOAHMP_VEG_PARAMETERS,only:HVT,HVB                      ! height at the top and bottom of vegetation (vegType)
 USE data_struc,only:yearLength                              ! number of days in the current year
@@ -184,6 +185,7 @@ integer(i4b)              :: steps_in_Forcfile              ! all time steps of 
 integer(i4b)              :: step_in_Forcfile               ! offset time step (in forcing file) for current simulation
 integer(i4b)              :: ncid                           ! integer variables for NetCDF IDs
 real(dp)                  :: currentJulday                  ! Julian day of current time step
+real(dp)                  :: startJulDay                    ! julian day at the start of the year
 !real(dp)                 :: dsec=0._dp                     ! double precision seconds (not used)
 integer(i4b)              :: dsec=0                         ! seconds (not used)
 ! *****************************************************************************
@@ -433,7 +435,7 @@ jstep=1
  steps_in_Forcfile=data_steps
 ! integer step_in_Forcfile=0 !the offset time step for current simulation in forcing data file
  step_in_Forcfile=1  
- 
+
  do istep=1,numtim  ! MAIN LOOP LEVEL 1 ON TIME
 
  ! set print flag
@@ -447,8 +449,15 @@ jstep=1
    mod(time_data%var(iLookTIME%iyyy),400) ==0 ) then
    yearLength=366
  endif
+
+
+ ! compute the julian day at the start of the year
+ call compjulday(time_data%var(iLookTIME%iyyy),          & ! input  = year
+                 1, 1, 1, 1, 0,                      & ! input  = month, day, hour, minute, second
+                 startJulDay,err,cmessage)                 ! output = julian day (fraction of day) + error control
+ if(err/=0)then; message=trim(message)//trim(cmessage); call handle_err(err,message);  endif
  
-! convert the current forcing data time to days since the beginning of time
+ ! convert the current forcing data time to days since the beginning of time
  call compjulday(time_data%var(iLookTIME%iyyy),           & ! input  = year
                  time_data%var(iLookTIME%im),             & ! input  = month
                  time_data%var(iLookTIME%id),             & ! input  = day
@@ -457,6 +466,9 @@ jstep=1
                  time_data%var(iLookTIME%isec),           & ! input  = isec
                  currentJulday,err,cmessage)                ! output = julian day (fraction of day) + error control
  if(err/=0)then; message=trim(message)//trim(cmessage); call handle_err(err,message);  endif
+
+ ! compute the time since the start of the year (in fractional days)
+ fracJulday = currentJulday - startJulDay
 
  !<1> according to nexttimestep function to determine if a data file needs to be opened
  if(step_in_Forcfile==1) then
